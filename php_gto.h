@@ -72,6 +72,9 @@ static void gto_htentry_dtor(void *data);
 static gto_override_token* fetch_override_token(zend_class_entry *ce, char* function_name, int name_len);
 static int store_override_token(gto_override_token *token);
 static int clear_override_token(gto_override_token *token);
+static int free_override_token(gto_override_token *token);
 
-static int gto_inject_override(zend_class_entry *ce, char* function_name, int name_len, zend_function *override, gto_override_token **token_out);
+static int gto_inject_override(zend_class_entry *ce, char* function_name, int name_len, zend_function *override, int update_children, gto_override_token **token_out);
 static int gto_revert_override(gto_override_token *token);
+
+static int gto_update_children(gto_override_token *token);

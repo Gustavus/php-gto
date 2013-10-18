@@ -116,8 +116,13 @@ struct _gto_override_token {
   zend_function *function;
   zend_function *override;
 
-  struct _gto_override_token *prev;
-  struct _gto_override_token *next;
+  struct _gto_override_token *prev;   // Same function/method override stack
+  struct _gto_override_token *next;   // ^
+
+  struct _gto_override_token *cnext;  // Child method override list
+  struct _gto_override_token *cprev;  // ^
+
+  struct _gto_override_token *parent; // Reference to the parent token
 };
 
 
@@ -140,47 +145,13 @@ static void gto_init_globals(zend_gto_globals *globals)
 
 static void gto_ortoken_dtor(zend_rsrc_list_entry *rsrc   TSRMLS_DC)
 {
-  gto_override_token *token = (gto_override_token*) rsrc->ptr;
-
-  if (token) {
-    if (token->active && gto_revert_override(token) == FAILURE) {
-      // Impl note:
-      // This is a problem. If the restoration failed, we still need to free the resources, but our
-      // state is completely hosed.
-      // This tends to occur when the request has ended and other modules start messing with stuff
-      // during their cleanup. In such cases, we don't care much about the state anyhow, since any
-      // failures will stem from missing or modified functions.
-      // Runkit and runkit-like things are also capable of breaking things in a horrible way.
-      // Though, we don't care about such cases nearly as much, as the user should already know the
-      // horrors that can occur from messing with the symbol table.
-
-
-      // @todo:
-      // if the function is a user function:
-      //  - Check that the class still exists (this shouldn't happen, if we're doing it right.)
-      //    - If the class no longer exists, there's nothing to restore anyway, so whatever.
-
-      // If the function is an internal function:
-      //  - Check if the module in which the function resides is still loaded.
-      //    - If not, we don't care, since the module likely did cleanup while we weren't looking.
-
-      // In all other cases... we still need to free the memory, but our state is completely hosed.
-
-      php_error(E_ERROR, "Unable to restore original state for function/method \"%s\".", token->function_name);
-    }
-
-    // Free memory associated with this token.
-    efree(token->function_name);
-    efree(token->function);
-    efree(token->override);
-    efree(token);
-  }
+  free_override_token((gto_override_token*) rsrc->ptr);
 }
 
 static void gto_htentry_dtor(void *data)
 {
   zend_hash_destroy(data);
-  //FREE_HASHTABLE(data);
+  //FREE_HASHTABLE(data); // We can't do this, or we blow up the hashtable.
 }
 
 
@@ -200,7 +171,7 @@ PHP_FUNCTION(override_function)
     RETURN_FALSE;
   }
 
-  if (gto_inject_override(NULL, func_name, func_name_len, fcc.function_handler, &token) == FAILURE) {
+  if (gto_inject_override(NULL, func_name, func_name_len, fcc.function_handler, 1, &token) == FAILURE) {
     RETURN_FALSE;
   }
 
@@ -221,20 +192,9 @@ PHP_FUNCTION(override_method)
     RETURN_FALSE;
   }
 
-  if (gto_inject_override(ce, func_name, func_name_len, fcc.function_handler, &token) == FAILURE) {
+  if (gto_inject_override(ce, func_name, func_name_len, fcc.function_handler, 1, &token) == FAILURE) {
     RETURN_FALSE;
   }
-
-  // @todo:
-  // We may need to add code here to update children methods to refer to the overridden method. This
-  // also necessitates code to remove the override reference in children methods as well.
-  // In any event, as it stands now, overriding a class' method only impacts that class itself. This
-  // may not be a bad thing, as test mocks should likely only be impacting the classes we're
-  // targeting explicitly.
-  //
-  // Things that would need to change to facilitiate this functionality:
-  //  - Tokens would need to know in which class the override resides.                        -DONE-
-  //  - An update function would need to be called both here and in the token free function.
 
   ZEND_REGISTER_RESOURCE(return_value, token, le_gto_override_token);
 }
@@ -299,12 +259,13 @@ static int store_override_token(gto_override_token *token)
         ALLOC_HASHTABLE(ftokens);
 
         if (zend_hash_add(GTO_G(ctokens), token->class->name, token->class->name_length + 1, ftokens, sizeof(HashTable), (void**)&ftokens) != SUCCESS) {
-         FREE_HASHTABLE(ftokens);
+          FREE_HASHTABLE(ftokens);
           return FAILURE;
         }
 
         zend_hash_init(ftokens, 5, NULL, NULL, 0);
       }
+
 
       return zend_hash_update(ftokens, token->function_name, token->name_len + 1, &token, sizeof(void*), NULL);
     } else {
@@ -312,6 +273,7 @@ static int store_override_token(gto_override_token *token)
         ALLOC_HASHTABLE(GTO_G(ftokens));
         zend_hash_init(GTO_G(ftokens), 10, NULL, NULL, 0);
       }
+
 
       return zend_hash_update(GTO_G(ftokens), token->function_name, token->name_len + 1, &token, sizeof(void*), NULL);
     }
@@ -362,9 +324,55 @@ static int clear_override_token(gto_override_token *token)
   return FAILURE;
 }
 
+static int free_override_token(gto_override_token *token)
+{
+  // Do NOT call this function twice on the same token.
+
+  if (token) {
+    if (token->active && gto_revert_override(token) == FAILURE) {
+      // Impl note:
+      // This is a problem. If the restoration failed, we still need to free the resources, but our
+      // state is completely hosed.
+      // This tends to occur when the request has ended and other modules start messing with stuff
+      // during their cleanup. In such cases, we don't care much about the state anyhow, since any
+      // failures will stem from missing or modified functions.
+      // Runkit and runkit-like things are also capable of breaking things in a horrible way.
+      // Though, we don't care about such cases nearly as much, as the user should already know the
+      // horrors that can occur from messing with the symbol table.
 
 
-static int gto_inject_override(zend_class_entry *ce, char* function_name, int name_len, zend_function *override, gto_override_token **token_out)
+      // @todo:
+      // if the function is a user function:
+      //  - Check that the class still exists (this shouldn't happen, if we're doing it right.)
+      //    - If the class no longer exists, there's nothing to restore anyway, so whatever.
+
+      // If the function is an internal function:
+      //  - Check if the module in which the function resides is still loaded.
+      //    - If not, we don't care, since the module likely did cleanup while we weren't looking.
+
+      // In all other cases... we still need to free the memory, but our state is completely hosed.
+
+      php_error(E_ERROR, "Unable to restore original state for function/method \"%s\".", token->function_name);
+    }
+
+    // Free memory associated with this token.
+    efree(token->function_name);
+    efree(token->function);
+    efree(token->override);
+
+    // Free the list of children...
+    for (; token->cnext; token->cnext = token->cnext->cnext) {
+      free_override_token(token->cnext);
+    }
+
+    // Free the token!
+    efree(token);
+  }
+}
+
+
+
+static int gto_inject_override(zend_class_entry *ce, char* function_name, int name_len, zend_function *override, int update_children, gto_override_token **token_out)
 {
   HashTable *ftable = ce ? &(ce->function_table) : EG(function_table);
 
@@ -391,28 +399,34 @@ static int gto_inject_override(zend_class_entry *ce, char* function_name, int na
   memcpy(token->override, override, sizeof(zend_function));
 
   token->override->common.fn_flags = token->function->common.fn_flags;
-  token->override->common.scope = token->function->common.scope;
+  token->override->common.scope = ce && update_children ? ce : token->function->common.scope;
 
   if (token->prev = ptoken) {
     ptoken->next = token;
   }
 
   token->next = NULL;
+  token->cprev = NULL;
+  token->cnext = NULL;
+  token->parent = NULL;
 
 
   if (store_override_token(token) != SUCCESS) {
-    efree(token->function_name);
-    efree(token->function);
-    efree(token->override);
-    efree(token);
+    free_override_token(token);
     *token_out = NULL;
 
     return FAILURE;
   }
 
-
   function_add_ref(token->override);
   memcpy(function, token->override, sizeof(zend_function));
+
+  if (update_children && token->class && gto_update_children(token) != SUCCESS) {
+    free_override_token(token);
+    *token_out = NULL;
+
+    return FAILURE;
+  }
 
   token->active = 1;
   return SUCCESS;
@@ -421,19 +435,30 @@ static int gto_inject_override(zend_class_entry *ce, char* function_name, int na
 static int gto_revert_override(gto_override_token *token)
 {
   zend_function *function;
+  gto_override_token *ctoken;
 
   if (token && token->active) {
     token->active = 0;
 
+    if (token->cnext) {
+      for (ctoken = token->cnext; ctoken; ctoken = ctoken->cnext) {
+        gto_revert_override(ctoken);
+      }
+    } else {
+    }
+
     if (!token->next) {
+      if (token != fetch_override_token(token->class, token->function_name, token->name_len)) {
+        // This isn't the top-level token -- our state is hosed.
+        php_error(E_ERROR, "Token state mismatch; Attempting to revert overrides out-of-order.\n");
+        return FAILURE;
+      }
+
       HashTable *ftable = token->class ? &(token->class->function_table) : EG(function_table);
       if (zend_hash_find(ftable, token->function_name, token->name_len + 1, (void**) &function) == FAILURE) {
         // Function has already been removed, it seems; likely due to global cleanup.
         return FAILURE;
       }
-
-      // @todo:
-      // Figure out how to check if the "active" token is the token we're expecting?
 
       memcpy(function, token->function, sizeof(zend_function));
 
@@ -448,14 +473,123 @@ static int gto_revert_override(gto_override_token *token)
         }
       }
     } else {
+
       // Swap function references so this token's state can be restored.
       function = token->next->function;
       token->next->function = token->function;
       token->function = function;
 
+      // Swap children references...
+
       // Remove token from the chain.
       if (token->next->prev = token->prev) {
         token->prev->next = token->next;
+      }
+    }
+  }
+
+  return SUCCESS;
+}
+
+
+static int gto_update_children(gto_override_token *token)
+{
+  if (!token || !token->class) {
+    return FAILURE;
+  }
+
+  HashTable *ht = EG(class_table);
+  HashPosition hpos;
+
+  zend_class_entry **class;
+  zend_function *function;
+  gto_override_token *cthead = NULL;
+  gto_override_token *ctoken;
+  gto_override_token *ptoken;
+  gto_override_token *pltoken;
+
+
+  for (zend_hash_internal_pointer_reset_ex(ht, &hpos); zend_hash_get_current_data_ex(ht, (void**) &class, &hpos) == SUCCESS; zend_hash_move_forward_ex(ht, &hpos)) {
+    if (*class != token->class && instanceof_function(*class, token->class)) {
+
+      if (zend_hash_find(&(*class)->function_table, token->function_name, token->name_len + 1, (void**) &function) == SUCCESS) {
+
+        if (function->common.scope && !instanceof_function(function->common.scope, *class)) {
+
+          ctoken = emalloc(sizeof(gto_override_token));
+          if (gto_inject_override(*class, token->function_name, token->name_len, token->override, 0, &ctoken) != SUCCESS) {
+            php_error(E_ERROR, "Unable to apply override to child method: %s.%s(...)\n", (*class)->name, token->function_name);
+            return FAILURE;
+          }
+
+          if (ctoken->cprev = cthead) {
+            cthead->cnext = ctoken;
+          } else {
+            token->cnext = ctoken;
+          }
+
+          ctoken->cnext = NULL;
+          ctoken->parent = token;
+
+          cthead = ctoken;
+        } else {
+
+          if (ptoken = fetch_override_token(*class, token->function_name, token->name_len)) {
+            ctoken = emalloc(sizeof(gto_override_token));
+
+            ctoken->class = *class;
+            ctoken->function_name = zend_str_tolower_dup(token->function_name, token->name_len);
+            ctoken->name_len = token->name_len;
+
+            ctoken->function = emalloc(sizeof(zend_function));
+            ctoken->override = emalloc(sizeof(zend_function));
+            memcpy(ctoken->override, token->override, sizeof(zend_function));
+
+            for (pltoken = ptoken, ptoken = ptoken->prev; ptoken; pltoken = ptoken, ptoken = ptoken->prev) {
+              if (ptoken->parent && (ptoken->parent->class == token->class || !instanceof_function(ptoken->parent->class, token->class))) {
+                // Inject override token between ptoken and ptoken->next
+
+                memcpy(ctoken->function, ptoken->override, sizeof(zend_function));
+                memcpy(ptoken->next->function, ctoken->override, sizeof(zend_function));
+
+                ctoken->next = ptoken->next;
+                ctoken->prev = ptoken;
+
+                ptoken->next->prev = ctoken;
+                ptoken->next = ctoken;
+
+                goto post_injection; // UH OH! The dredded goto keyword!
+              }
+            }
+
+            // We didn't find a better injection point, so we just need to put it at the beginning
+            // of the token chain.
+            memcpy(ctoken->function, pltoken->function, sizeof(zend_function));
+            memcpy(pltoken->function, ctoken->override, sizeof(zend_function));
+
+
+            ctoken->next = pltoken;
+            ctoken->prev = NULL;
+
+            pltoken->prev = ctoken;
+
+
+post_injection:
+            ctoken->active = 1;
+
+            if (ctoken->cprev = cthead) {
+              cthead->cnext = ctoken;
+            } else {
+              token->cnext = ctoken;
+            }
+
+            ctoken->cnext = NULL;
+            ctoken->parent = token;
+
+            cthead = ctoken;
+          }
+
+        }
       }
     }
   }
