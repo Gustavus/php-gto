@@ -60,10 +60,26 @@ ZEND_BEGIN_ARG_INFO(arginfo_override_revert, 0)
   ZEND_ARG_INFO(0, token)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO(arginfo_call_overridden_func, 0)
+  ZEND_ARG_INFO(0, token)
+  ZEND_ARG_INFO(0, object)
+  ZEND_ARG_INFO(0, parameter)
+  ZEND_ARG_INFO(0, ...)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_call_overridden_func_array, 0)
+  ZEND_ARG_INFO(0, token)
+  ZEND_ARG_INFO(0, object)
+  ZEND_ARG_INFO(0, parameters) /* ARRAY_INFO(0, params, 1) */
+ZEND_END_ARG_INFO()
+
 zend_function_entry gto_functions[] = {
-  PHP_FE(override_function, arginfo_override_function)
-  PHP_FE(override_method,   arginfo_override_method)
-  PHP_FE(override_revert,   arginfo_override_revert)
+  PHP_FE(override_function,           arginfo_override_function)
+  PHP_FE(override_method,             arginfo_override_method)
+  PHP_FE(override_revert,             arginfo_override_revert)
+
+  PHP_FE(call_overridden_func,        arginfo_call_overridden_func)
+  PHP_FE(call_overridden_func_array,  arginfo_call_overridden_func_array)
 
   { NULL, NULL, NULL }
 };
@@ -201,24 +217,72 @@ PHP_FUNCTION(override_method)
 
 PHP_FUNCTION(override_revert)
 {
-  zval *var;
+  zval *res;
   gto_override_token *token;
 
-  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &var) == FAILURE) {
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &res) == FAILURE) {
     RETURN_FALSE;
   }
 
-  ZEND_FETCH_RESOURCE(token, gto_override_token*, &var, -1, GTO_ORTOKEN_RES_NAME, le_gto_override_token);
+  ZEND_FETCH_RESOURCE(token, gto_override_token*, &res, -1, GTO_ORTOKEN_RES_NAME, le_gto_override_token);
 
   if (gto_revert_override(token) == FAILURE) {
     // @todo: Maybe throw an error here...?
     RETURN_FALSE;
   }
 
-  zend_list_delete(Z_LVAL_P(var));
+  zend_list_delete(Z_LVAL_P(res));
   RETURN_TRUE;
 }
 
+
+PHP_FUNCTION(call_overridden_func)
+{
+  zval *res, *object;
+  gto_override_token *token;
+  zval ***argv = NULL;
+  int argc = 0;
+
+
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zo!*", &res, &object, &argv, &argc) == FAILURE) {
+    RETURN_FALSE;
+  }
+
+  ZEND_FETCH_RESOURCE(token, gto_override_token*, &res, -1, GTO_ORTOKEN_RES_NAME, le_gto_override_token);
+
+  gto_call_override_token(token, object, argc, argv, return_value);
+
+  if (argc) {
+    efree(argv);
+  }
+}
+
+PHP_FUNCTION(call_overridden_func_array)
+{
+  zval *res, *object;
+  gto_override_token *token;
+  zval *params, ***argv = NULL;
+  int argc = 0, index = 0;
+  HashTable *pht;
+
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zo!A/", &res, &object, &params) == FAILURE) {
+    RETURN_FALSE;
+  }
+
+  ZEND_FETCH_RESOURCE(token, gto_override_token*, &res, -1, GTO_ORTOKEN_RES_NAME, le_gto_override_token);
+
+  // Shamelessly stolen from PHP's call_user_method_array (basic_functions.c ~4802)
+  pht = HASH_OF(params);
+  argc = zend_hash_num_elements(pht);
+  argv = (zval***) safe_emalloc(sizeof(zval**), argc, 0);
+
+  for (zend_hash_internal_pointer_reset(pht); zend_hash_get_current_data(pht, (void**) &(argv[index++])); zend_hash_move_forward(pht));
+  // No body
+
+  gto_call_override_token(token, object, argc, argv, return_value);
+
+  efree(argv);
+}
 
 
 
@@ -365,6 +429,11 @@ static int free_override_token(gto_override_token *token)
       free_override_token(token->cnext);
     }
 
+    // Decrement ref counts...
+    if (token->class) {
+      --token->class->refcount;
+    }
+
     // Free the token!
     efree(token);
   }
@@ -418,6 +487,10 @@ static int gto_inject_override(zend_class_entry *ce, char* function_name, int na
     return FAILURE;
   }
 
+  if (token->class) {
+    ++token->class->refcount;
+  }
+
   function_add_ref(token->override);
   memcpy(function, token->override, sizeof(zend_function));
 
@@ -444,7 +517,6 @@ static int gto_revert_override(gto_override_token *token)
       for (ctoken = token->cnext; ctoken; ctoken = ctoken->cnext) {
         gto_revert_override(ctoken);
       }
-    } else {
     }
 
     if (!token->next) {
@@ -473,13 +545,10 @@ static int gto_revert_override(gto_override_token *token)
         }
       }
     } else {
-
       // Swap function references so this token's state can be restored.
       function = token->next->function;
       token->next->function = token->function;
       token->function = function;
-
-      // Swap children references...
 
       // Remove token from the chain.
       if (token->next->prev = token->prev) {
@@ -490,7 +559,6 @@ static int gto_revert_override(gto_override_token *token)
 
   return SUCCESS;
 }
-
 
 static int gto_update_children(gto_override_token *token)
 {
@@ -548,7 +616,6 @@ static int gto_update_children(gto_override_token *token)
             for (pltoken = ptoken, ptoken = ptoken->prev; ptoken; pltoken = ptoken, ptoken = ptoken->prev) {
               if (ptoken->parent && (ptoken->parent->class == token->class || !instanceof_function(ptoken->parent->class, token->class))) {
                 // Inject override token between ptoken and ptoken->next
-
                 memcpy(ctoken->function, ptoken->override, sizeof(zend_function));
                 memcpy(ptoken->next->function, ctoken->override, sizeof(zend_function));
 
@@ -566,7 +633,6 @@ static int gto_update_children(gto_override_token *token)
             // of the token chain.
             memcpy(ctoken->function, pltoken->function, sizeof(zend_function));
             memcpy(pltoken->function, ctoken->override, sizeof(zend_function));
-
 
             ctoken->next = pltoken;
             ctoken->prev = NULL;
@@ -592,6 +658,65 @@ post_injection:
         }
       }
     }
+  }
+
+  return SUCCESS;
+}
+
+static int gto_call_override_token(gto_override_token *token, zval *object, int argc, zval ***argv, zval *retval)
+{
+  zval *retval_ptr;
+  zend_fcall_info fci;
+  zend_fcall_info_cache fcc;
+  zend_class_entry *ce;
+
+  if (token->class && !(token->function->common.fn_flags & ZEND_ACC_STATIC)) {
+    if (!object || ZVAL_IS_NULL(object)) {
+      php_error_docref(NULL TSRMLS_CC, E_ERROR, "An object instance is required when calling an overridden method.\n");
+      ZVAL_NULL(retval);
+      return FAILURE;
+    }
+
+    // Check object class here. We need to have the same class as the token for the scope to have
+    // meaning. While I'm curious what kind of shenanigans can happen if we provide an instance of
+    // the wrong class, it's not likely desirable. I can only imagine debugging such an issue would
+    // cause all sorts of headaches.
+    if (!(ce = zend_get_class_entry(object)) || !instanceof_function(ce, token->class)) {
+      php_error_docref(NULL TSRMLS_CC, E_ERROR, "The object provided must be an instance of the class \"%s\" to call this override.\n", token->class->name);
+      ZVAL_NULL(retval);
+      return FAILURE;
+    }
+  }
+
+  // ZVAL-ize our string. Hopefully this won't segfault on us when it falls off the stack.
+  zval funcname;
+  ZVAL_STRING(&funcname, token->function_name, 0);
+
+  // Impl note:
+  // We're not using zend_fcall_info_init here because what we're doing is far off from what is
+  // expected by PHP. Moreover, the afore mentioned function checks if our target is callable, which
+  // isn't something we care about as we already know the target is valid and reflection can violate
+  // any visibility modifiers anyhow.
+  fci.size = sizeof(fci);
+  fci.function_name = &funcname;
+  fci.function_table = token->class ? &token->class->function_table : EG(function_table);
+  fci.symbol_table = NULL; // null by default and call_user_method sets the symbol table to null. Should probably remain null.
+  fci.retval_ptr_ptr = &retval_ptr;
+  fci.param_count = argc;
+  fci.params = argv;
+  fci.object_ptr = (token->class && !(token->function->common.fn_flags & ZEND_ACC_STATIC)) ? object : NULL;
+  fci.no_separation = token->class ? 1 : 0; // call_user_method doesn't do this, so we probably shouldn't either.
+
+  fcc.initialized = 1;
+  fcc.function_handler = token->function;
+  fcc.calling_scope = token->class ? token->class : NULL;
+  fcc.called_scope = EG(scope);
+  fcc.object_ptr = fci.object_ptr;
+
+  if (zend_call_function(&fci, &fcc TSRMLS_CC) == SUCCESS && fci.retval_ptr_ptr && *fci.retval_ptr_ptr) {
+    COPY_PZVAL_TO_ZVAL(*retval, *fci.retval_ptr_ptr);
+  } else {
+    ZVAL_NULL(retval);
   }
 
   return SUCCESS;

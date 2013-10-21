@@ -61,6 +61,9 @@ PHP_FUNCTION(override_function);
 PHP_FUNCTION(override_method);
 PHP_FUNCTION(override_revert);
 
+PHP_FUNCTION(call_overridden_func);
+PHP_FUNCTION(call_overridden_func_array);
+
 
 // Initializers & Destructors
 static void gto_init_globals(zend_gto_globals *globals);
@@ -78,3 +81,5 @@ static int gto_inject_override(zend_class_entry *ce, char* function_name, int na
 static int gto_revert_override(gto_override_token *token);
 
 static int gto_update_children(gto_override_token *token);
+
+static int gto_call_override_token(gto_override_token *token, zval *object, int argc, zval ***argv, zval *retval);
