@@ -23,7 +23,6 @@ A typical override using GTO looks like this:
 override_function ($token, in the above example) still exists within the current scope. A more
 in-depth example can be found further into this document.
 
-
 It should be noted, however, that while we encourage using this extension during testing, each use
 should be carefully scrutinized. In cases where you find yourself using overrides to mock the output
 of your own functions or methods, it's likely a sign that your code needs to be refactored. In fact,
