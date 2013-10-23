@@ -57,11 +57,125 @@ PHP_MINIT_FUNCTION(gto);
 
 
 // PHP Functions
+/**
+ * override_function(function, callback)
+ *
+ * Overrides the specified function with the callback specified.
+ *
+ * Input:
+ *  - (string) function
+ *    The fully-qualified name of the function to override.
+ *
+ *  - (callable) callback
+ *    The callback which will be called in place of the original function.
+ *
+ * Output:
+ *  - (resource | null)
+ *    An override token representing the override information, or null if the function could not be
+ *    overridden for any reason.
+ *
+ *    The override token returned by this method must be kept in scope to maintain the override. If
+ *    the token falls out of scope for any reason, the override will be reverted.
+ */
 PHP_FUNCTION(override_function);
+
+/**
+ * override_method(class, method, callback)
+ *
+ * Overrides the specified class method or static function with the callback specified.
+ *
+ * Input:
+ *  - (string) class
+ *    The fully qualified name of the class containing the method to override
+ *
+ *  - (string) method
+ *    The name of the method or static function to override.
+ *
+ *  - (callable) callback
+ *    The callback which will be called in place of the original method.
+ *
+ * Output:
+ *  - (resource | null)
+ *    An override token representing the override information, or null if the method could not be
+ *    overridden for any reason.
+ *
+ *    The override token returned by this method must be kept in scope to maintain the override. If
+ *    the token falls out of scope for any reason, the override will be reverted.
+ */
 PHP_FUNCTION(override_method);
+
+/**
+ * override_revert(token)
+ *
+ * Reverts the override referenced by the specified override token. The given token will be
+ * destroyed as the result of a successful call to this function.
+ *
+ * Input:
+ *  - (resource) token
+ *    The override token to revert. Must be a valid resource returned by a previous call to
+ *    override_function or override_method.
+ *
+ * Output:
+ *  - (boolean)
+ *    True if the override represented by the specified token was reverted successfully; false
+ *    otherwise.
+ */
 PHP_FUNCTION(override_revert);
 
+/**
+ * call_overridden_func(token, object, params...)
+ *
+ * Calls the original function or method specified by the given override token and returns the
+ * result.
+ *
+ * Input:
+ *  - (resource) token
+ *    The override token representing the overridden function/method to call.
+ *
+ *  - (object) object
+ *    The object to use as the context when calling a method. This value is ignored entirely when
+ *    the override token represents a global or static function.
+ *
+ *    When the overriden token represents a method, this value must be an instance of the class in
+ *    which the method is defined. That is, if the token represents the method "MyClass.testMethod,"
+ *    object must be an instance of MyClass or one of its subclasses.
+ *
+ *  - (mixed) params...
+ *    A variable number of parameters to pass to the overridden function.
+ *
+ * Output:
+ *  - (mixed)
+ *    The value returned by the called function/method. If the called function/method has no return
+ *    value, this function will return null.
+ */
 PHP_FUNCTION(call_overridden_func);
+
+/**
+ * call_overridden_func_array(token, object, params)
+ *
+ * Calls the original function or method specified by the given override token and returns the
+ * result.
+ *
+ * Input:
+ *  - (resource) token
+ *    The override token representing the overridden function/method to call.
+ *
+ *  - (object) object
+ *    The object to use as the context when calling a method. This value is ignored entirely when
+ *    the override token represents a global or static function.
+ *
+ *    When the overriden token represents a method, this value must be an instance of the class in
+ *    which the method is defined. That is, if the token represents the method "MyClass.testMethod,"
+ *    object must be an instance of MyClass or one of its subclasses.
+ *
+ *  - (array[mixed]) params
+ *    An array containing the parameters to pass to the overridden function.
+ *
+ * Output:
+ *  - (mixed)
+ *    The value returned by the called function/method. If the called function/method has no return
+ *    value, this function will return null.
+ */
 PHP_FUNCTION(call_overridden_func_array);
 
 

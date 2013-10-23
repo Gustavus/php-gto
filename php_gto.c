@@ -409,6 +409,7 @@ static int free_override_token(gto_override_token *token)
       // if the function is a user function:
       //  - Check that the class still exists (this shouldn't happen, if we're doing it right.)
       //    - If the class no longer exists, there's nothing to restore anyway, so whatever.
+      //    - If the class doesn't exist, we'll likely segfault when we try to check the token.
 
       // If the function is an internal function:
       //  - Check if the module in which the function resides is still loaded.
