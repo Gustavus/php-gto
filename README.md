@@ -121,44 +121,44 @@ for each function.
 
 PHP Code:
 
-  <?php
-    /**
-     * Define a callback to handle calls to the strrev function. We could define this inline during
-     * the override_function call, but we're doing it here for clarity.
-     *
-     * Alternatively, we could use any function or method reference here. Any of the following are
-     * valid as well:
-     *  - 'trim' (references the global function "trim")
-     *  - [new MyClass(), 'myMethod']
-     *  - 'MyClass::myStaticMethod'
-     */
-    $callback = function($input) {
-      return "input string: {$input}";
-    }
-
-    /**
-     * Override the 'strrev' function and store the token. If we don't hold on to the returned
-     * token, the override will be reverted as soon as PHP cleans up the variable (which, in many
-     * cases, is immediate).
-     */
-    $token = override_function('strrev', $callback);
-
-    /**
-     * Call the strrev function. It should now call the function we defined above instead of the
-     * built-in 'strrev' function.
-     */
-    print strrev('test string');
-
-    /**
-     * Revert the override so we can call the original function again. We could also let the token
-     * fall out of scope (or manually change its value), but we're going to be explicit here.
-     */
-    override_revert($token);
-
-    /**
-     * Calling strrev at this point should now do what we expect.
-     */
-    print strrev('test string');
+    <?php
+      /**
+       * Define a callback to handle calls to the strrev function. We could define this inline during
+       * the override_function call, but we're doing it here for clarity.
+       *
+       * Alternatively, we could use any function or method reference here. Any of the following are
+       * valid as well:
+       *  - 'trim' (references the global function "trim")
+       *  - [new MyClass(), 'myMethod']
+       *  - 'MyClass::myStaticMethod'
+       */
+      $callback = function($input) {
+        return "input string: {$input}";
+      }
+  
+      /**
+       * Override the 'strrev' function and store the token. If we don't hold on to the returned
+       * token, the override will be reverted as soon as PHP cleans up the variable (which, in many
+       * cases, is immediate).
+       */
+      $token = override_function('strrev', $callback);
+  
+      /**
+       * Call the strrev function. It should now call the function we defined above instead of the
+       * built-in 'strrev' function.
+       */
+      print strrev('test string');
+  
+      /**
+       * Revert the override so we can call the original function again. We could also let the token
+       * fall out of scope (or manually change its value), but we're going to be explicit here.
+       */
+      override_revert($token);
+  
+      /**
+       * Calling strrev at this point should now do what we expect.
+       */
+      print strrev('test string');
 
 
 
@@ -178,14 +178,14 @@ Outputs:
 
 
 **Input:**
-  - (string) function
+  - (string) function  
     The fully-qualified name of the function to override.
 
-  - (callable) callback
+  - (callable) callback  
     The callback which will be called in place of the original function.
 
 **Output:**
-  - (resource | null)
+  - (resource | null)  
     An override token representing the override information, or null if the function could not be
     overridden for any reason.
 
@@ -200,17 +200,17 @@ Outputs:
 
 
 **Input:**
-  - (string) class
+  - (string) class  
     The fully qualified name of the class containing the method to override
 
-  - (string) method
+  - (string) method  
     The name of the method or static function to override.
 
-  - (callable) callback
+  - (callable) callback  
     The callback which will be called in place of the original method.
 
 **Output:**
-  - (resource | null)
+  - (resource | null)  
     An override token representing the override information, or null if the method could not be
     overridden for any reason.
 
@@ -226,12 +226,12 @@ Outputs:
 
 
 **Input:**
-  - (resource) token
+  - (resource) token  
     The override token to revert. Must be a valid resource returned by a previous call to
     override_function or override_method.
 
 **Output:**
-  - (boolean)
+  - (boolean)  
     True if the override represented by the specified token was reverted successfully; false
     otherwise.
 
@@ -244,10 +244,10 @@ Outputs:
 
 
 **Input:**
-  - (resource) token
+  - (resource) token  
     The override token representing the overridden function/method to call.
 
-  - (object) object
+  - (object) object  
     The object to use as the context when calling a method. This value is ignored entirely when
     the override token represents a global or static function.
 
@@ -255,11 +255,11 @@ Outputs:
     which the method is defined. That is, if the token represents the method "MyClass.testMethod,"
     object must be an instance of MyClass or one of its subclasses.
 
-  - (mixed) params...
+  - (mixed) params...  
     A variable number of parameters to pass to the overridden function.
 
 **Output:**
-  - (mixed)
+  - (mixed)  
     The value returned by the called function/method. If the called function/method has no return
     value, this function will return null.
 
@@ -272,10 +272,10 @@ Outputs:
 
 
 **Input:**
-  - (resource) token
+  - (resource) token  
     The override token representing the overridden function/method to call.
 
-  - (object) object
+  - (object) object  
     The object to use as the context when calling a method. This value is ignored entirely when
     the override token represents a global or static function.
 
@@ -283,12 +283,10 @@ Outputs:
     which the method is defined. That is, if the token represents the method "MyClass.testMethod,"
     object must be an instance of MyClass or one of its subclasses.
 
-  - (array[mixed]) params
+  - (array[mixed]) params  
     An array containing the parameters to pass to the overridden function.
 
 **Output:**
-  - (mixed)
+  - (mixed)  
     The value returned by the called function/method. If the called function/method has no return
     value, this function will return null.
-
-----------------------------------------------------------------------------------------------------
