@@ -6,9 +6,8 @@ PHP 5.4+ extension for temporarily overriding PHP functions/methods at runtime.
 
 
 
-
 ## Introduction/About
-====================================================================================================
+
 
 The Gustavus Testing Overrides (GTO) project is a PHP extension we put together to deal with some
 difficult situations we found ourselves dealing with during testing. While frameworks like PHPUnit
@@ -46,7 +45,7 @@ this extension can lead to a lot of extra (and unnecessary) tracing and debuggin
 
 
 ## Compiling & Installing
-====================================================================================================
+
 
 PHP provides a number of tools which actually makes this step a lot less painful than most would
 expect. On Windows, you'll likely need something to process makefiles (we recommend MinGW), but
@@ -117,7 +116,7 @@ for each function.
 
 
 ## Example Usage
-====================================================================================================
+
 
 PHP Code:
 
@@ -171,7 +170,7 @@ Outputs:
 
 
 ## Function Reference
-====================================================================================================
+
 
 #### override_function(function, callback)
 
