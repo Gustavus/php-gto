@@ -7,7 +7,7 @@ PHP 5.4+ extension for temporarily overriding PHP functions/methods at runtime.
 
 
 ====================================================================================================
-> Introduction/About
+## Introduction/About
 ====================================================================================================
 
 The Gustavus Testing Overrides (GTO) project is a PHP extension we put together to deal with some
@@ -24,7 +24,7 @@ override token).
 
 A typical override using GTO looks like this:
 
-  $token = override_function('function', function() { return "override!" });
+    $token = override_function('function', function() { return "override!" });
 
 ... and that's it. The function will be overridden so long as the resource returned by the
 override_function ($token, in the above example) still exists within the current scope. A more
@@ -39,13 +39,13 @@ never be used in any kind of production environment.  PHP already does enough th
 runtime indeterministic, and functionality like that provided by GTO certainly doesn't help things
 any.
 
-tl;dr: As with any tool, some thought should go into where and when it is used. Arbitrary use of
+**tl;dr:** As with any tool, some thought should go into where and when it is used. Arbitrary use of
 this extension can lead to a lot of extra (and unnecessary) tracing and debugging.
 
 
 
 ====================================================================================================
-> Compiling & Installing
+## Compiling & Installing
 ====================================================================================================
 
 PHP provides a number of tools which actually makes this step a lot less painful than most would
@@ -116,7 +116,7 @@ for each function.
 
 
 ====================================================================================================
-> Example Usage
+## Example Usage
 ====================================================================================================
 
 PHP Code:
@@ -163,25 +163,26 @@ PHP Code:
 
 
 Outputs:
+
     input string: test string
     gnirts tset
 
 
 
 ====================================================================================================
-> Function Reference
+## Function Reference
 ====================================================================================================
 
-### override_function(function, callback)
+#### override_function(function, callback)
 
   Overrides the specified function with the callback specified.
 
 
 **Input:**
-  - (string) function  
+  - (string) *function*  
     The fully-qualified name of the function to override.
 
-  - (callable) callback  
+  - (callable) *callback*  
     The callback which will be called in place of the original function.
 
 **Output:**
@@ -194,19 +195,19 @@ Outputs:
 
 ----------------------------------------------------------------------------------------------------
 
-### override_method(class, method, callback)
+#### override_method(class, method, callback)
 
   Overrides the specified class method or static function with the callback specified.
 
 
 **Input:**
-  - (string) class  
+  - (string) *class*  
     The fully qualified name of the class containing the method to override
 
-  - (string) method  
+  - (string) *method*  
     The name of the method or static function to override.
 
-  - (callable) callback  
+  - (callable) *callback*  
     The callback which will be called in place of the original method.
 
 **Output:**
@@ -219,14 +220,14 @@ Outputs:
 
 ----------------------------------------------------------------------------------------------------
 
-### override_revert(token)
+#### override_revert(token)
 
   Reverts the override referenced by the specified override token. The given token will be
   destroyed as the result of a successful call to this function.
 
 
 **Input:**
-  - (resource) token  
+  - (resource) *token*  
     The override token to revert. Must be a valid resource returned by a previous call to
     override_function or override_method.
 
@@ -237,17 +238,17 @@ Outputs:
 
 ----------------------------------------------------------------------------------------------------
 
-### call_overridden_func(token, object, params...)
+#### call_overridden_func(token, object, params...)
 
   Calls the original function or method specified by the given override token and returns the
   result.
 
 
 **Input:**
-  - (resource) token  
+  - (resource) *token*  
     The override token representing the overridden function/method to call.
 
-  - (object) object  
+  - (object) *object*  
     The object to use as the context when calling a method. This value is ignored entirely when
     the override token represents a global or static function.
 
@@ -255,7 +256,7 @@ Outputs:
     which the method is defined. That is, if the token represents the method "MyClass.testMethod,"
     object must be an instance of MyClass or one of its subclasses.
 
-  - (mixed) params...  
+  - (mixed) *params...*  
     A variable number of parameters to pass to the overridden function.
 
 **Output:**
@@ -265,17 +266,17 @@ Outputs:
 
 ----------------------------------------------------------------------------------------------------
 
-### call_overridden_func_array(token, object, params)
+#### call_overridden_func_array(token, object, params)
 
   Calls the original function or method specified by the given override token and returns the
   result.
 
 
 **Input:**
-  - (resource) token  
+  - (resource) *token*  
     The override token representing the overridden function/method to call.
 
-  - (object) object  
+  - (object) *object*  
     The object to use as the context when calling a method. This value is ignored entirely when
     the override token represents a global or static function.
 
@@ -283,7 +284,7 @@ Outputs:
     which the method is defined. That is, if the token represents the method "MyClass.testMethod,"
     object must be an instance of MyClass or one of its subclasses.
 
-  - (array[mixed]) params  
+  - (array[mixed]) *params*  
     An array containing the parameters to pass to the overridden function.
 
 **Output:**
